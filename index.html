@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gamepad Detection & Input Test</title>
+    <style>
+        body { font-family: sans-serif; margin: 20px; background-color: #f4f4f4; color: #333; }
+        h1 { color: #0056b3; }
+        #status { font-weight: bold; margin-bottom: 15px; padding: 10px; border-radius: 5px; }
+        .connected { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .disconnected { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        #gamepadInfo { background-color: #fff; padding: 15px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        #gamepadInfo p { margin: 5px 0; }
+        #buttons span { display: inline-block; width: 30px; height: 30px; line-height: 30px; text-align: center; border: 1px solid #ccc; border-radius: 5px; margin: 2px; background-color: #eee; }
+        #buttons span.pressed { background-color: #007bff; color: white; border-color: #007bff; }
+        #axes div { margin-top: 5px; }
+        .axis-bar { width: 100px; height: 10px; background-color: #eee; border: 1px solid #ccc; display: inline-block; margin-left: 5px; position: relative; overflow: hidden; }
+        .axis-fill { height: 100%; background-color: #28a745; position: absolute; }
+    </style>
+</head>
+<body>
+    <h1>Gamepad Detection & Input Test</h1>
+    <div id="status" class="disconnected">No gamepad detected. Connect one to start.</div>
+
+    <div id="gamepadInfo" style="display: none;">
+        <p><strong>ID:</strong> <span id="gamepadId"></span></p>
+        <p><strong>Index:</strong> <span id="gamepadIndex"></span></p>
+        <p><strong>Mapping:</strong> <span id="gamepadMapping"></span></p>
+        <p><strong>Buttons:</strong> <div id="buttons"></div></p>
+        <p><strong>Axes:</strong> <div id="axes"></div></p>
+    </div>
+
+    <script>
+        const statusDiv = document.getElementById('status');
+        const gamepadInfoDiv = document.getElementById('gamepadInfo');
+        const gamepadIdSpan = document.getElementById('gamepadId');
+        const gamepadIndexSpan = document.getElementById('gamepadIndex');
+        const gamepadMappingSpan = document.getElementById('gamepadMapping');
+        const buttonsDiv = document.getElementById('buttons');
+        const axesDiv = document.getElementById('axes');
+
+        let connectedGamepad = null;
+        let animationFrameId = null;
+
+        // Event listener for when a gamepad is connected
+        window.addEventListener("gamepadconnected", (event) => {
+            // This event fires when the browser detects a gamepad.
+            // This is the core "detection" part relevant to the article's theme.
+            console.log("Gamepad connected at index %d: %s. %d buttons, %d axes.",
+                        event.gamepad.index, event.gamepad.id,
+                        event.gamepad.buttons.length, event.gamepad.axes.length);
+            connectedGamepad = event.gamepad;
+            updateStatus(true);
+            startGamepadLoop();
+        });
+
+        // Event listener for when a gamepad is disconnected
+        window.addEventListener("gamepaddisconnected", (event) => {
+            // This event fires when a previously connected gamepad is removed.
+            console.log("Gamepad disconnected from index %d: %s",
+                        event.gamepad.index, event.gamepad.id);
+            if (connectedGamepad && connectedGamepad.index === event.gamepad.index) {
+                connectedGamepad = null;
+                updateStatus(false);
+                stopGamepadLoop();
+            }
+        });
+
+        function updateStatus(isConnected) {
+            if (isConnected) {
+                statusDiv.className = 'connected';
+                statusDiv.textContent = `Gamepad "${connectedGamepad.id}" detected!`;
+                gamepadInfoDiv.style.display = 'block';
+                gamepadIdSpan.textContent = connectedGamepad.id;
+                gamepadIndexSpan.textContent = connectedGamepad.index;
+                gamepadMappingSpan.textContent = connectedGamepad.mapping || 'Standard';
+                renderButtons(connectedGamepad.buttons.length);
+                renderAxes(connectedGamepad.axes.length);
+            } else {
+                statusDiv.className = 'disconnected';
+                statusDiv.textContent = 'No gamepad detected. Connect one to start.';
+                gamepadInfoDiv.style.display = 'none';
+            }
+        }
+
+        function renderButtons(count) {
+            buttonsDiv.innerHTML = '';
+            for (let i = 0; i < count; i++) {
+                const buttonSpan = document.createElement('span');
+                buttonSpan.id = `button-${i}`;
+                buttonSpan.textContent = i;
+                buttonsDiv.appendChild(buttonSpan);
+            }
+        }
+
+        function renderAxes(count) {
+            axesDiv.innerHTML = '';
+            for (let i = 0; i < count; i++) {
+                const axisContainer = document.createElement('div');
+                axisContainer.textContent = `Axis ${i}: `;
+                const axisValueSpan = document.createElement('span');
+                axisValueSpan.id = `axis-value-${i}`;
+                axisValueSpan.textContent = '0.00';
+                const axisBar = document.createElement('div');
+                axisBar.className = 'axis-bar';
+                const axisFill = document.createElement('div');
+                axisFill.className = 'axis-fill';
+                axisFill.id = `axis-fill-${i}`;
+                axisBar.appendChild(axisFill);
+                axisContainer.appendChild(axisValueSpan);
+                axisContainer.appendChild(axisBar);
+                axesDiv.appendChild(axisContainer);
+            }
+        }
+
+        function startGamepadLoop() {
+            if (!animationFrameId) {
+                gamepadLoop();
+            }
+        }
+
+        function stopGamepadLoop() {
+            if (animationFrameId) {
+                cancelAnimationFrame(animationFrameId);
+                animationFrameId = null;
+            }
+        }
+
+        function gamepadLoop() {
+            // navigator.getGamepads() is crucial for polling the current state
+            // It returns an array of gamepads, even if only one is connected.
+            const gamepads = navigator.getGamepads();
+            if (connectedGamepad) {
+                // Find the currently connected gamepad in the polled array
+                const currentGamepadState = gamepads[connectedGamepad.index];
+
+                if (currentGamepadState) {
+                    // Update button states
+                    currentGamepadState.buttons.forEach((button, i) => {
+                        const buttonSpan = document.getElementById(`button-${i}`);
+                        if (buttonSpan) {
+                            if (button.pressed) {
+                                buttonSpan.classList.add('pressed');
+                            } else {
+                                buttonSpan.classList.remove('pressed');
+                            }
+                        }
+                    });
+
+                    // Update axis states
+                    currentGamepadState.axes.forEach((axisValue, i) => {
+                        const axisValueSpan = document.getElementById(`axis-value-${i}`);
+                        const axisFill = document.getElementById(`axis-fill-${i}`);
+                        if (axisValueSpan && axisFill) {
+                            axisValueSpan.textContent = axisValue.toFixed(2);
+                            // Axes usually range from -1 to 1. Convert to a visual representation.
+                            const fillWidth = Math.abs(axisValue) * 50; // 0-50% from center
+                            axisFill.style.width = `${fillWidth}%`;
+                            if (axisValue < 0) {
+                                axisFill.style.left = `${50 - fillWidth}%`;
+                            } else {
+                                axisFill.style.left = '50%';
+                            }
+                        }
+                    });
+                }
+            }
+            animationFrameId = requestAnimationFrame(gamepadLoop);
+        }
+
+        // Initial check for already connected gamepads on page load
+        // This handles cases where a gamepad is connected before the page loads.
+        const initialGamepads = navigator.getGamepads();
+        for (let i = 0; i < initialGamepads.length; i++) {
+            if (initialGamepads[i]) {
+                connectedGamepad = initialGamepads[i];
+                updateStatus(true);
+                startGamepadLoop();
+                break; // Only handle the first detected gamepad for simplicity
+            }
+        }
+        if (!connectedGamepad) {
+            updateStatus(false);
+        }
+
+    </script>
+</body>
+</html>
